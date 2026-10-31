@@ -71,7 +71,7 @@ python3 -m unittest discover -s tests -v
 
 The first ChromaDB run also downloads its default ONNX embedding model (about 80 MB) once, then works offline. Without the extra, `python3 -m unittest discover -s tests -v` still passes: the ChromaDB cases skip cleanly.
 
-The suite is 25 test methods, including the adapter conformance contract and scenario replays looped over each installed backend - reference always, ChromaDB when installed. Without the chroma extra, 22 run and the ChromaDB cases skip cleanly.
+The suite is 26 test methods, including the adapter conformance contract and scenario replays looped over each installed backend - reference always, ChromaDB when installed. Without the chroma extra, 22 run and the ChromaDB cases skip cleanly.
 
 ## Beyond the happy path: the robustness suite
 
