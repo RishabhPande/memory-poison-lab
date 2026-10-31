@@ -115,7 +115,7 @@ const resetBtn = document.getElementById('reset');
 const decisionPanel = document.getElementById('decision');
 const defensePanel = document.getElementById('defense');
 
-let scenarioId = 'A1';
+let scenarioId = Object.keys(DATA.scenarios)[0];
 let shown = 0, timer = null, guess = null, revealed = false;
 
 function scenario() { return DATA.scenarios[scenarioId]; }
@@ -248,8 +248,8 @@ function aggregate() {
 // Deep links for testing and sharing a state: #reveal=A1, #defense=A2
 function autodrive() {
   const h = location.hash || '';
-  const m = h.match(/#(play|reveal|defense)=(A1|A2|A3|A4)/);
-  if (!m) return;
+  const m = h.match(/^#(play|reveal|defense)=([A-Za-z0-9_-]+)$/);
+  if (!m || !Object.prototype.hasOwnProperty.call(DATA.scenarios, m[2])) return;
   scenarioId = m[2]; reset();
   if (scenario().compacted) {
     const banner = document.createElement('div');
