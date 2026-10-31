@@ -4,7 +4,7 @@
 
 A local test range for agent memory poisoning: persistent memory as an attack surface. Feed an agent's memory controlled untrusted writes, watch a planted memory change what the agent does, then try to stop it - and prove the repair worked.
 
-![The attack, revealed](assets/demo-revealed.png)
+![Architecture](assets/architecture.svg)
 
 > **Scope, plainly.** Synthetic targets, a scripted deterministic agent. This repo demonstrates the *mechanics* of memory poisoning, defense and repair from published research, on real memory backends. It is not evidence about the safety of any real LLM, hosted memory service, or production system. Never point anything in here at a system you do not own.
 
