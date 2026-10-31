@@ -9,6 +9,7 @@ API key, no paid calls - and skip cleanly when chromadb is absent.
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -58,7 +59,7 @@ class TestAdapterContract(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_CHROMA, "chromadb not installed")
 class TestChromaScenarioReplay(unittest.TestCase):
-    """All four attack scenarios against the real vector store."""
+    """Every registered attack scenario against the real vector store."""
 
     def test_all_scenarios_flip_block_restore(self):
         from mpolab.scenarios import SCENARIOS
@@ -95,19 +96,19 @@ class TestChromaScenarioReplay(unittest.TestCase):
                 naive_mem = ChromaMemory(collection_name=f"mpl-n-{sid}")
                 fill(naive_mem)
                 naive = ScriptedSupplyAgent(naive_mem, defended=False).decide()
-                self.assertEqual(naive["vendor"], "CheapSupplies.example")
+                self.assertEqual(naive["vendor"], spec["expected"]["naive_vendor"])
 
                 def_mem = ChromaMemory(screen_writes=True, collection_name=f"mpl-d-{sid}")
                 fill(def_mem)
                 defended = ScriptedSupplyAgent(def_mem, defended=True).decide()
-                self.assertEqual(defended["vendor"], "OfficeDepot")
+                self.assertEqual(defended["vendor"], spec["expected"]["defended_vendor"])
 
                 rep_mem = ChromaMemory(collection_name=f"mpl-r-{sid}")
                 fill(rep_mem)
                 removed = rep_mem.repair()
                 self.assertTrue(removed)
                 after = ScriptedSupplyAgent(rep_mem, defended=False).decide()
-                self.assertEqual(after["vendor"], "OfficeDepot")
+                self.assertEqual(after["vendor"], spec["expected"]["repaired_vendor"])
 
 
 @unittest.skipUnless(HAVE_CHROMA, "chromadb not installed")
@@ -127,6 +128,32 @@ class TestChromaCollectionIsolation(unittest.TestCase):
         b = ChromaMemory(collection_name="mpl-shared-regression")
         a.retain("Approved vendor: OfficeDepot for all office-supply orders.", TRUST_OWNER, 1)
         self.assertEqual(len(b.entries()), 1)
+
+
+class TestScenarioRegistration(unittest.TestCase):
+    def test_new_scenario_is_included_and_uses_its_expectations(self):
+        from mpolab.scenarios import SCENARIOS, run_all
+
+        custom = dict(SCENARIOS["A1"])
+        custom["name"] = "Custom registration regression"
+        custom["writes"] = [
+            (step, trust, text.replace("CheapSupplies.example", "NewVendor.example"), source)
+            for step, trust, text, source in custom["writes"]
+        ]
+        custom["expected"] = {
+            **custom["expected"],
+            "naive_vendor": "NewVendor.example",
+        }
+
+        with patch.dict(SCENARIOS, {"A5": custom}):
+            result = run_all()
+
+        self.assertIn("A5", result["scenarios"])
+        self.assertEqual(result["scenarios"]["A5"]["naive"]["vendor"], "NewVendor.example")
+        self.assertTrue(result["scenarios"]["A5"]["flipped"])
+        self.assertTrue(result["scenarios"]["A5"]["defended"]["blocked"])
+        self.assertTrue(result["scenarios"]["A5"]["repair"]["restored"])
+        self.assertEqual(result["aggregate"]["total"], 5)
 
 
 if __name__ == "__main__":
