@@ -1,4 +1,4 @@
-"""Four memory-poisoning attack scenarios with defense and repair
+"""Five memory-poisoning attack scenarios with defense and repair
 runs, built from the published attack taxonomy (see README sources):
 
 - A1 direct injection: one untrusted tool write carries an
