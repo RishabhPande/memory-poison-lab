@@ -248,7 +248,7 @@ function aggregate() {
 // Deep links for testing and sharing a state: #reveal=A1, #defense=A2
 function autodrive() {
   const h = location.hash || '';
-  const m = h.match(/#(play|reveal|defense)=(A1|A2|A3|A4)/);
+  const m = h.match(/#(play|reveal|defense)=(A1|A2|A3|A4|A5)/);
   if (!m) return;
   scenarioId = m[2]; reset();
   if (scenario().compacted) {

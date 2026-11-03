@@ -58,7 +58,7 @@ class TestAdapterContract(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_CHROMA, "chromadb not installed")
 class TestChromaScenarioReplay(unittest.TestCase):
-    """All four attack scenarios against the real vector store."""
+    """Every registered attack scenario against the real vector store."""
 
     def test_all_scenarios_flip_block_restore(self):
         from mpolab.scenarios import SCENARIOS

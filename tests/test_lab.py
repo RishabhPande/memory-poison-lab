@@ -96,7 +96,7 @@ class TestScenarios(unittest.TestCase):
         result = run_all()
         self.assertEqual(
             result["aggregate"],
-            {"naive_flips": 4, "defended_blocks": 4, "repairs_restored": 4, "total": 4},
+            {"naive_flips": 5, "defended_blocks": 5, "repairs_restored": 5, "total": 5},
         )
 
 
