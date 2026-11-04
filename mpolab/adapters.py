@@ -155,13 +155,14 @@ class ChromaMemory:
 
 
 class SQLiteVecMemory:
-    """sqlite-vec-backed memory: approximate nearest-neighbour recall
-    inside SQLite, no server and no model download.
+    """sqlite-vec-backed memory: vector recall inside SQLite,
+    no server and no model download.
 
     Embeddings are a deterministic hashed bag-of-words (stdlib only):
     every token updates one fixed dimension, then the vector is
     L2-normalized. That keeps this adapter offline and reproducible
-    while still exercising real ANN recall plumbing in sqlite-vec.
+    while still exercising real vector-recall plumbing in sqlite-vec
+    (exact brute-force KNN over the stored rows, no index).
     It does not measure semantic embedding quality - ChromaMemory's
     ONNX model is the realistic-embedding backend.
 
