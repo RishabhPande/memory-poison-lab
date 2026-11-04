@@ -11,6 +11,7 @@ dependencies = []
 
 [project.optional-dependencies]
 chroma = ["chromadb>=1.0"]
+sqlitevec = ["sqlite-vec>=0.1.6"]
 dev = []
 
 [tool.setuptools]

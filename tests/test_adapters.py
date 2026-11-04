@@ -4,6 +4,8 @@ the memory contract, not of one implementation.
 
 ChromaDB tests use its local ONNX embedding model - no server, no
 API key, no paid calls - and skip cleanly when chromadb is absent.
+sqlite-vec tests use a deterministic hashed embedding (no model
+download at all) and skip cleanly when sqlite-vec is absent.
 """
 
 import os
@@ -21,9 +23,30 @@ try:
 except ImportError:
     HAVE_CHROMA = False
 
+try:
+    import sqlite_vec  # noqa: F401 - probe first; the adapter imports it lazily
+    from mpolab.adapters import SQLiteVecMemory
+    HAVE_SQLITEVEC = True
+except ImportError:
+    HAVE_SQLITEVEC = False
+
 BACKENDS = [("reference", ReferenceMemory)]
 if HAVE_CHROMA:
     BACKENDS.append(("chroma", ChromaMemory))
+if HAVE_SQLITEVEC:
+    BACKENDS.append(("sqlitevec", SQLiteVecMemory))
+
+# Real vector stores that replay every scenario, with a factory that
+# keeps each memory instance isolated from the others.
+VECTOR_BACKENDS = []
+if HAVE_CHROMA:
+    VECTOR_BACKENDS.append(
+        ("chroma", lambda name, screen=False: ChromaMemory(screen_writes=screen, collection_name=name))
+    )
+if HAVE_SQLITEVEC:
+    VECTOR_BACKENDS.append(
+        ("sqlitevec", lambda name, screen=False: SQLiteVecMemory(screen_writes=screen))
+    )
 
 
 def contract_suite(case, make):
@@ -56,16 +79,17 @@ class TestAdapterContract(unittest.TestCase):
                 contract_suite(self, make)
 
 
-@unittest.skipUnless(HAVE_CHROMA, "chromadb not installed")
-class TestChromaScenarioReplay(unittest.TestCase):
-    """Every registered attack scenario against the real vector store."""
+@unittest.skipUnless(VECTOR_BACKENDS, "no vector-store backend installed")
+class TestVectorBackendScenarioReplay(unittest.TestCase):
+    """Every registered attack scenario against every real vector store."""
 
     def test_all_scenarios_flip_block_restore(self):
         from mpolab.scenarios import SCENARIOS
         from mpolab.agent import ScriptedSupplyAgent
 
-        for sid in SCENARIOS:
-            with self.subTest(scenario=sid):
+        for backend_name, make in VECTOR_BACKENDS:
+          for sid in SCENARIOS:
+            with self.subTest(backend=backend_name, scenario=sid):
                 spec = SCENARIOS[sid]
                 writes = sorted(
                     [
@@ -92,17 +116,17 @@ class TestChromaScenarioReplay(unittest.TestCase):
                         ids = {s: remap.get(i, i) for s, i in ids.items()}
                     return ids
 
-                naive_mem = ChromaMemory(collection_name=f"mpl-n-{sid}")
+                naive_mem = make(f"mpl-n-{sid}")
                 fill(naive_mem)
                 naive = ScriptedSupplyAgent(naive_mem, defended=False).decide()
                 self.assertEqual(naive["vendor"], "CheapSupplies.example")
 
-                def_mem = ChromaMemory(screen_writes=True, collection_name=f"mpl-d-{sid}")
+                def_mem = make(f"mpl-d-{sid}", screen=True)
                 fill(def_mem)
                 defended = ScriptedSupplyAgent(def_mem, defended=True).decide()
                 self.assertEqual(defended["vendor"], "OfficeDepot")
 
-                rep_mem = ChromaMemory(collection_name=f"mpl-r-{sid}")
+                rep_mem = make(f"mpl-r-{sid}")
                 fill(rep_mem)
                 removed = rep_mem.repair()
                 self.assertTrue(removed)
@@ -127,6 +151,18 @@ class TestChromaCollectionIsolation(unittest.TestCase):
         b = ChromaMemory(collection_name="mpl-shared-regression")
         a.retain("Approved vendor: OfficeDepot for all office-supply orders.", TRUST_OWNER, 1)
         self.assertEqual(len(b.entries()), 1)
+
+
+@unittest.skipUnless(HAVE_SQLITEVEC, "sqlite-vec not installed")
+class TestSQLiteVecInstanceIsolation(unittest.TestCase):
+    """Each SQLiteVecMemory owns an in-memory database, so two default
+    instances can never see each other's episodes."""
+
+    def test_default_instances_are_isolated(self):
+        a = SQLiteVecMemory()
+        b = SQLiteVecMemory()
+        a.retain("Approved vendor: OfficeDepot for all office-supply orders.", TRUST_OWNER, 1)
+        self.assertEqual(b.entries(), [])
 
 
 if __name__ == "__main__":
