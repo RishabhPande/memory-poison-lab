@@ -28,12 +28,13 @@ Each scenario runs three ways against fresh, real backends - no mocks:
 
 Current scoreboard, verified by the test suite: **5/5 attacks flip the undefended agent, 5/5 are blocked with defenses on, 5/5 are restored by repair.**
 
-## Two backends, one contract
+## Three backends, one contract
 
-The attacks and defenses are properties of the memory contract, not of one implementation, so the whole range runs against two backends:
+The attacks and defenses are properties of the memory contract, not of one implementation, so the whole range runs against three backends:
 
 - **`ReferenceMemory`** - dependency-free in-memory store. Good for reading the mechanics.
 - **`ChromaMemory`** (`mpolab/adapters.py`) - an adapter over [ChromaDB](https://github.com/chroma-core/chroma), a real local vector store with its default ONNX embedding model. No server, no API key, no paid calls: `pip install chromadb` and the same five attacks replay against embeddings and nearest-neighbor recall. One disclosure: the first ChromaDB run downloads its default ONNX embedding model (about 80 MB) from the internet; after that one-time download it runs fully offline.
+- **`SQLiteVecMemory`** (`mpolab/adapters.py`) - an adapter over [sqlite-vec](https://github.com/asg017/sqlite-vec), approximate nearest-neighbour recall inside SQLite: no server, no model download at all. It embeds with a deterministic hashed bag-of-words (standard library only), so it exercises real ANN recall plumbing offline; it is not a measure of semantic embedding quality. `pip install sqlite-vec`.
 
 `tests/test_adapters.py` runs a conformance contract plus every registered scenario against every installed backend. Adding your own adapter (mem0, Zep, Letta, pgvector - anything with retain/recall) inherits the entire attack suite.
 
@@ -67,12 +68,13 @@ Verified on a clean checkout:
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install '.[chroma]'       # local checkout extra; pulls chromadb
+pip install '.[sqlitevec]'    # or the sqlite-vec backend; no model download
 python3 -m unittest discover -s tests -v
 ```
 
-The first ChromaDB run also downloads its default ONNX embedding model (about 80 MB) once, then works offline. Without the extra, `python3 -m unittest discover -s tests -v` still passes: the ChromaDB cases skip cleanly.
+The first ChromaDB run also downloads its default ONNX embedding model (about 80 MB) once, then works offline. Without either extra, `python3 -m unittest discover -s tests -v` still passes: the vector-store cases skip cleanly.
 
-The suite is 25 test methods, including the adapter conformance contract and the scenario replays looped over each installed backend - reference always, ChromaDB when installed. Without the chroma extra, 22 run and the ChromaDB cases skip cleanly.
+The suite is 26 test methods, including the adapter conformance contract and the scenario replays looped over each installed backend - reference always, plus ChromaDB and sqlite-vec when installed. Leg counts: 22 run on the standard library alone (4 skip), 25 run with ChromaDB (1 skips), 24 run with sqlite-vec (2 skip); CI runs all three legs.
 
 ## Beyond the happy path: the robustness suite
 
