@@ -34,7 +34,7 @@ The attacks and defenses are properties of the memory contract, not of one imple
 
 - **`ReferenceMemory`** - dependency-free in-memory store. Good for reading the mechanics.
 - **`ChromaMemory`** (`mpolab/adapters.py`) - an adapter over [ChromaDB](https://github.com/chroma-core/chroma), a real local vector store with its default ONNX embedding model. No server, no API key, no paid calls: `pip install chromadb` and the same five attacks replay against embeddings and nearest-neighbor recall. One disclosure: the first ChromaDB run downloads its default ONNX embedding model (about 80 MB) from the internet; after that one-time download it runs fully offline.
-- **`SQLiteVecMemory`** (`mpolab/adapters.py`) - an adapter over [sqlite-vec](https://github.com/asg017/sqlite-vec), approximate nearest-neighbour recall inside SQLite: no server, no model download at all. It embeds with a deterministic hashed bag-of-words (standard library only), so it exercises real ANN recall plumbing offline; it is not a measure of semantic embedding quality. `pip install sqlite-vec`.
+- **`SQLiteVecMemory`** (`mpolab/adapters.py`) - an adapter over [sqlite-vec](https://github.com/asg017/sqlite-vec), nearest-neighbour vector recall inside SQLite (exact KNN, no index): no server, no model download at all. It embeds with a deterministic hashed bag-of-words (standard library only), so it exercises real vector-recall plumbing offline; it is not a measure of semantic embedding quality. `pip install sqlite-vec`.
 
 `tests/test_adapters.py` runs a conformance contract plus every registered scenario against every installed backend. Adding your own adapter (mem0, Zep, Letta, pgvector - anything with retain/recall) inherits the entire attack suite.
 
