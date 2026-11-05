@@ -60,32 +60,58 @@ class TestMemoryBackend(unittest.TestCase):
 
     def test_classify_preference_signals(self):
         self.assertEqual(classify("approved vendor is now X"), "preference")
+        self.assertEqual(classify("preferred courier is now X"), "preference")
         self.assertEqual(classify("delivery windows moved to two days"), "episodic")
 
 
+# Per-scenario expectations: A1-A5 attack the vendor decision; A6
+# grafts a courier preference the owner never set.
+EXPECTED_NAIVE = {sid: "CheapSupplies.example" for sid in ("A1", "A2", "A3", "A4", "A5")}
+EXPECTED_NAIVE["A6"] = "FastShip.example"
+EXPECTED_BASELINE = {sid: "OfficeDepot" for sid in ("A1", "A2", "A3", "A4", "A5")}
+EXPECTED_BASELINE["A6"] = "StandardShip"
+
+
 class TestScenarios(unittest.TestCase):
-    def test_all_three_attack_classes_flip_the_naive_agent(self):
+    def test_all_scenarios_flip_the_naive_agent(self):
         for sid in SCENARIOS:
             with self.subTest(scenario=sid):
                 run = run_scenario(sid)
                 self.assertTrue(run["flipped"])
-                self.assertEqual(run["naive"]["vendor"], "CheapSupplies.example")
+                self.assertEqual(run["naive"][run["subject"]], EXPECTED_NAIVE[sid])
 
-    def test_defenses_block_all_three(self):
+    def test_defenses_block_all_scenarios(self):
         for sid in SCENARIOS:
             with self.subTest(scenario=sid):
                 run = run_scenario(sid)
                 self.assertTrue(run["defended"]["blocked"])
-                self.assertEqual(run["defended"]["vendor"], "OfficeDepot")
+                self.assertEqual(run["defended"][run["subject"]], EXPECTED_BASELINE[sid])
 
-    def test_repair_restores_baseline(self):
-        for sid in SCENARIOS:
+    def test_repair_restores_baseline_for_owner_anchored_subjects(self):
+        for sid in ("A1", "A2", "A3", "A4", "A5"):
             with self.subTest(scenario=sid):
                 run = run_scenario(sid)
-                self.assertNotEqual(run["repair"]["vendor_before"], "OfficeDepot")
+                self.assertNotEqual(run["repair"]["decision_before"], EXPECTED_BASELINE[sid])
                 self.assertTrue(run["repair"]["restored"])
-                self.assertEqual(run["repair"]["vendor_after"], "OfficeDepot")
+                self.assertEqual(run["repair"]["decision_after"], EXPECTED_BASELINE[sid])
                 self.assertTrue(set(run["poison_ids"]) <= set(run["repair"]["removed_ids"]))
+
+    def test_repair_alone_cannot_remove_an_unanchored_graft(self):
+        # A6's documented limit: no owner courier claim exists, so
+        # conflict-scoped repair has nothing to contradict and removes
+        # nothing. This test pins the limitation so it is never
+        # silently "fixed" by weakening the repair policy.
+        run = run_scenario("A6")
+        self.assertFalse(run["repair"]["restored"])
+        self.assertEqual(run["repair"]["removed_ids"], [])
+        self.assertEqual(run["repair"]["decision_after"], "FastShip.example")
+
+    def test_owner_anchor_lets_repair_remove_the_graft(self):
+        run = run_scenario("A6")
+        anchored = run["repair"]["anchored"]
+        self.assertTrue(anchored["restored"])
+        self.assertEqual(anchored["decision_after"], "StandardShip")
+        self.assertTrue(set(run["poison_ids"]) <= set(anchored["removed_ids"]))
 
     def test_runs_are_deterministic(self):
         first = json.dumps(run_all(), sort_keys=True)
@@ -96,7 +122,14 @@ class TestScenarios(unittest.TestCase):
         result = run_all()
         self.assertEqual(
             result["aggregate"],
-            {"naive_flips": 5, "defended_blocks": 5, "repairs_restored": 5, "total": 5},
+            {
+                "naive_flips": 6,
+                "defended_blocks": 6,
+                "repairs_restored": 5,
+                "repair_limitations": ["A6"],
+                "anchored_repairs": 1,
+                "total": 6,
+            },
         )
 
 
