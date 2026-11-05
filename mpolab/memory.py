@@ -36,6 +36,7 @@ _WORD = re.compile(r"[a-z0-9]+")
 PREFERENCE_SIGNALS = (
     "approved vendor",
     "preferred vendor",
+    "preferred courier",
     "from now on",
     "always order",
     "user prefers",
