@@ -196,11 +196,15 @@ function reveal() {
     if (poison.has(id)) c.classList.add('poison');
   });
   decisionPanel.classList.remove('hidden');
+  const ownerLine = s.subject === 'courier'
+    ? 'The owner never set a courier policy - the fallback is <b>' + s.baseline + '</b>.'
+    : 'Owner policy says <b>' + s.baseline + '</b>.';
+  const action = s.subject === 'courier' ? 'booked delivery with' : 'ordered from';
   decisionPanel.innerHTML = '<h2>What the naive agent did</h2>' +
     '<p class="verdict">' + (correct ? '<span class="good">You found it.</span> ' : '<span class="bad">Not that one.</span> ') +
     'The poison was write ' + s.poison_ids.map(i => '#' + i).join(', ') + ' (' + s.attack_class.toLowerCase() + ').</p>' +
-    '<p class="verdict">Owner policy says <b>' + s.baseline_vendor + '</b>. With no defenses, the agent ordered from ' +
-    '<span class="bad">' + s.naive.vendor + '</span> - steered by write #' + s.naive.influenced_by + '.</p>';
+    '<p class="verdict">' + ownerLine + ' With no defenses, the agent ' + action + ' ' +
+    '<span class="bad">' + s.naive[s.subject] + '</span> - steered by write #' + s.naive.influenced_by + '.</p>';
   revealBtn.disabled = true;
   defendBtn.classList.remove('hidden');
   hint.textContent = '';
@@ -210,12 +214,24 @@ function defend() {
   const s = scenario();
   defendBtn.disabled = true;
   defensePanel.classList.remove('hidden');
-  const removed = s.repair.removed_ids.map(i => '#' + i).join(', ');
+  const action = s.subject === 'courier' ? 'books delivery with' : 'orders from';
+  let repairLine;
+  if (s.repair.restored) {
+    const removed = s.repair.removed_ids.map(i => '#' + i).join(', ');
+    repairLine = '<p class="verdict">Repair pass removed write ' + removed + ' - policy: <i>' + s.repair.policy +
+      '</i>. The decision returns to <span class="good">' + s.repair.decision_after + '</span>.</p>';
+  } else {
+    const a = s.repair.anchored;
+    const removedA = a.removed_ids.map(i => '#' + i).join(', ');
+    repairLine = '<p class="verdict"><span class="bad">Repair pass removed nothing.</span> The graft contradicts no owner claim - ' +
+      'the documented limit of conflict-scoped repair (<i>' + s.repair.policy + '</i>).</p>' +
+      '<p class="verdict">Once the owner states a policy ("' + a.owner_write + '"), the same pass removes write ' +
+      removedA + ' and the decision returns to <span class="good">' + a.decision_after + '</span>.</p>';
+  }
   defensePanel.innerHTML = '<h2>With trust partitioning, write screening and repair</h2>' +
-    '<p class="verdict">Origin-aware recall and write-time quarantine: the agent orders from ' +
-    '<span class="good">' + s.defended.vendor + '</span>. The attack is blocked.</p>' +
-    '<p class="verdict">Repair pass removed write ' + removed + ' - policy: <i>' + s.repair.policy +
-    '</i>. The decision returns to <span class="good">' + s.repair.vendor_after + '</span>.</p>';
+    '<p class="verdict">Origin-aware recall and write-time quarantine: the agent ' + action + ' ' +
+    '<span class="good">' + s.defended[s.subject] + '</span>. The attack is blocked.</p>' +
+    repairLine;
 }
 
 function reset() {
@@ -229,9 +245,11 @@ function reset() {
   revealBtn.disabled = true;
   playBtn.disabled = false;
   const s = scenario();
-  document.getElementById('storyline').innerHTML =
-    'The agent reorders printer paper for the office. Owner policy: <b>' + s.baseline_vendor + '</b>. ' +
-    'Watch the memory writes arrive, then call the poison before the reveal.';
+  document.getElementById('storyline').innerHTML = s.subject === 'courier'
+    ? 'The agent reorders printer paper and books the delivery. Owner policy sets the vendor (<b>OfficeDepot</b>) but says nothing about couriers. ' +
+      'Watch the memory writes arrive, then call the poison before the reveal.'
+    : 'The agent reorders printer paper for the office. Owner policy: <b>' + s.baseline + '</b>. ' +
+      'Watch the memory writes arrive, then call the poison before the reveal.';
   document.getElementById('attackclass').textContent = 'Attack class: ' + s.attack_class + '.';
   hint.textContent = '';
   buildTabs();
@@ -242,13 +260,16 @@ function aggregate() {
   document.getElementById('aggregate').innerHTML =
     '<div><b>' + a.naive_flips + '/' + a.total + '</b>attacks flipped the undefended agent</div>' +
     '<div><b>' + a.defended_blocks + '/' + a.total + '</b>blocked with defenses on</div>' +
-    '<div><b>' + a.repairs_restored + '/' + a.total + '</b>restored by the repair pass</div>';
+    '<div><b>' + a.repairs_restored + '/' + a.total + '</b>restored by the repair pass</div>' +
+    (a.repair_limitations.length
+      ? '<div><b>' + a.repair_limitations.join(', ') + '</b>graft needs an owner-stated policy before repair can remove it</div>'
+      : '');
 }
 
 // Deep links for testing and sharing a state: #reveal=A1, #defense=A2
 function autodrive() {
   const h = location.hash || '';
-  const m = h.match(/#(play|reveal|defense)=(A1|A2|A3|A4|A5)/);
+  const m = h.match(/#(play|reveal|defense)=(A1|A2|A3|A4|A5|A6)/);
   if (!m) return;
   scenarioId = m[2]; reset();
   if (scenario().compacted) {
