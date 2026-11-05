@@ -91,6 +91,9 @@ class TestVectorBackendScenarioReplay(unittest.TestCase):
           for sid in SCENARIOS:
             with self.subTest(backend=backend_name, scenario=sid):
                 spec = SCENARIOS[sid]
+                subject = spec.get("subject", "vendor")
+                baseline = ScriptedSupplyAgent.SUBJECTS[subject][0]
+                attacker = "FastShip.example" if subject == "courier" else "CheapSupplies.example"
                 writes = sorted(
                     [
                         (1, TRUST_OWNER, "Approved vendor: OfficeDepot for all office-supply orders.", "owner policy"),
@@ -118,20 +121,35 @@ class TestVectorBackendScenarioReplay(unittest.TestCase):
 
                 naive_mem = make(f"mpl-n-{sid}")
                 fill(naive_mem)
-                naive = ScriptedSupplyAgent(naive_mem, defended=False).decide()
-                self.assertEqual(naive["vendor"], "CheapSupplies.example")
+                naive = ScriptedSupplyAgent(naive_mem, defended=False).decide(subject)
+                self.assertEqual(naive[subject], attacker)
 
                 def_mem = make(f"mpl-d-{sid}", screen=True)
                 fill(def_mem)
-                defended = ScriptedSupplyAgent(def_mem, defended=True).decide()
-                self.assertEqual(defended["vendor"], "OfficeDepot")
+                defended = ScriptedSupplyAgent(def_mem, defended=True).decide(subject)
+                self.assertEqual(defended[subject], baseline)
 
                 rep_mem = make(f"mpl-r-{sid}")
                 fill(rep_mem)
                 removed = rep_mem.repair()
-                self.assertTrue(removed)
-                after = ScriptedSupplyAgent(rep_mem, defended=False).decide()
-                self.assertEqual(after["vendor"], "OfficeDepot")
+                after = ScriptedSupplyAgent(rep_mem, defended=False).decide(subject)
+                if spec.get("anchor"):
+                    # A6's documented limit: no owner claim on the
+                    # grafted subject, so conflict-scoped repair
+                    # removes nothing and the graft still steers.
+                    self.assertEqual(removed, [])
+                    self.assertEqual(after[subject], attacker)
+                    # Once the owner states a policy, the same repair
+                    # pass removes the graft and the baseline returns.
+                    step, trust, text, source = spec["anchor"]
+                    rep_mem.retain(text, trust, step, source)
+                    anchored_removed = rep_mem.repair()
+                    self.assertTrue(anchored_removed)
+                    anchored = ScriptedSupplyAgent(rep_mem, defended=False).decide(subject)
+                    self.assertEqual(anchored[subject], baseline)
+                else:
+                    self.assertTrue(removed)
+                    self.assertEqual(after[subject], baseline)
 
 
 @unittest.skipUnless(HAVE_CHROMA, "chromadb not installed")
