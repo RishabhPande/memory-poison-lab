@@ -1,7 +1,8 @@
-"""Regression checks for reopening Chroma collections, without model downloads.
+"""Regression checks for reopening Chroma collections.
 
-The fake implements only the Chroma collection operations this adapter uses.
-These checks test adapter ID bookkeeping, not Chroma retrieval quality.
+Four bookkeeping checks use a collection double with no dependencies or model
+download. Three optional real-Chroma checks use its default local ONNX model,
+which may download on first run. These are not retrieval-quality benchmarks.
 """
 import importlib.util
 import unittest
