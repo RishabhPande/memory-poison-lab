@@ -25,7 +25,10 @@ class ChromaMemory:
     its own unique collection - episodes can never leak between two
     default instances or across test runs. Passing collection_name is
     an explicit opt-in to reuse: the named collection is opened with
-    get_or_create and shared by every instance that names it.
+    get_or_create and shared by every instance that names it. Serial
+    writes and compaction synchronize IDs from stored metadata. This
+    is not a concurrency lock: simultaneous writers need external
+    coordination. ID synchronization scans collection metadata.
     """
 
     def __init__(self, screen_writes: bool = False, collection_name: str | None = None):
@@ -41,7 +44,15 @@ class ChromaMemory:
             self._collection = self._client.get_or_create_collection(collection_name)
         self._eid = 0
 
+    def _sync_eid(self) -> None:
+        # Explicitly named collections can be reopened or shared by multiple
+        # adapter instances. A process-local counter would reuse e1 and make
+        # Chroma ignore a new write (or collide during compaction).
+        stored = self._collection.get(include=["metadatas"])["metadatas"]
+        self._eid = max([self._eid] + [int(md["eid"]) for md in stored])
+
     def _next_eid(self) -> int:
+        self._sync_eid()
         self._eid += 1
         return self._eid
 
@@ -114,6 +125,7 @@ class ChromaMemory:
 
     def compact(self, step: int) -> list[MemoryEntry]:
         entries = sorted(self._all_rows(), key=lambda e: e.id)
+        self._sync_eid()
         summaries, drop = compact_plan(entries, step, self._eid + 1)
         if drop:
             self._collection.delete(ids=[f"e{i}" for i in drop])
