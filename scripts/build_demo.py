@@ -288,6 +288,10 @@ function autodrive() {
   if (m[1] === 'defense') defend();
 }
 
+playBtn.onclick = play;
+revealBtn.onclick = reveal;
+defendBtn.onclick = defend;
+resetBtn.onclick = reset;
 aggregate();
 reset();
 autodrive();
