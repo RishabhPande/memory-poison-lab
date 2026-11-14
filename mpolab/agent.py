@@ -69,3 +69,41 @@ class ScriptedSupplyAgent:
             "influenced_by": entry.id,
             "recalled_ids": [e.id for e in recalled],
         }
+
+    def explain(self, subject: str = "vendor") -> dict:
+        """Explain one deterministic decision without changing memory.
+
+        Ranks are recall order, not relevance scores. A stored entry outside
+        the recall window may be irrelevant or displaced; the trace does not
+        pretend to know which. Quarantine and origin filtering stay distinct.
+        The caller must serialize access if another writer shares the store.
+        """
+        decision = self.decide(subject)
+        ranks = {eid: rank for rank, eid in enumerate(decision["recalled_ids"], 1)}
+        rows = []
+        for entry in self.memory.entries():
+            rank = ranks.get(entry.id)
+            claim = parse_claim(entry.text)
+            if entry.quarantined:
+                reason = "quarantined"
+            elif rank is None:
+                reason = "not_recalled"
+            elif entry.kind != "preference":
+                reason = "not_preference"
+            elif self.defended and entry.origin != TRUST_OWNER:
+                reason = "untrusted_origin"
+            elif not claim or claim[0] != subject:
+                reason = "no_subject_claim"
+            elif entry.id == decision["influenced_by"]:
+                reason = "selected"
+            else:
+                reason = "lower_priority"
+            rows.append({**entry.as_dict(), "recall_rank": rank, "reason": reason})
+        return {
+            "subject": subject,
+            "query": self.SUBJECTS[subject][1],
+            "recall_limit": 10,
+            "defended": self.defended,
+            "decision": decision,
+            "entries": rows,
+        }
