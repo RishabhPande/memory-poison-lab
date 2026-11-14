@@ -54,6 +54,27 @@ open demo/index.html            # no server, no dependencies
 
 Play the memory writes, click the card you think is the poison, then reveal: the flipped decision, the defense run, and the repair pass. Deep-linkable states (`#reveal=A2`, `#defense=A4`) make any outcome shareable as a URL.
 
+### Inspect the decision, not just the outcome
+
+After the reveal, the **decision evidence** panel shows the actual recall window and every stored write. Switch between no defenses, defenses on, and repair alone. A6 also shows the owner-anchored repair. Expand a write to inspect its stored label, recorded origin, source, confidence and the reason the policy selected or rejected it.
+
+- **A5:** see the ten recalled writes and the owner policy left outside the recall window.
+- **A2 / A4:** separate a summary label from recorded origin. An imported origin still cannot prove pre-import provenance.
+- **A6:** compare the surviving courier graft with the owner-anchored repair, without hiding the first repair's failure.
+
+The JSON download contains the complete deterministic scenario replay, including every phase, and works offline. It contains the answers, just like the self-contained page source. Ranks are recall order, not relevance scores; a write outside recall may be irrelevant or displaced.
+
+The same evidence is available in Python:
+
+```python
+trace = agent.explain("vendor")
+print(trace["decision"])  # unchanged decide() result
+for entry in trace["entries"]:
+    print(entry["id"], entry["recall_rank"], entry["reason"])
+```
+
+`explain()` does not change memory or the decision policy. It snapshots a synchronous decision; coordinate concurrent writers externally. This is evidence about this scripted policy, not an LLM explanation or a new safety score.
+
 ## Quickstart - run the whole range
 
 Python 3.10+. The reference suite has zero dependencies:
@@ -75,7 +96,7 @@ python3 -m unittest discover -s tests -v
 
 The first ChromaDB run also downloads its default ONNX embedding model (about 80 MB) once, then works offline. Without either extra, `python3 -m unittest discover -s tests -v` still passes: the vector-store cases skip cleanly.
 
-The suite is 32 test methods, including the adapter conformance contract and the scenario replays looped over each installed backend - reference always, plus ChromaDB and sqlite-vec when installed. Leg counts: 28 run on the standard library alone (4 skip), 31 run with ChromaDB (1 skips), 30 run with sqlite-vec (2 skip); CI runs all three legs.
+The suite is 55 test methods, including the adapter conformance contract and the scenario replays looped over each installed backend - reference always, plus ChromaDB and sqlite-vec when installed. Leg counts: 48 pass on the standard library alone (7 skip), 54 pass with ChromaDB (1 skips), 50 pass with sqlite-vec (5 skip); all 55 pass with both installed. CI runs the standard-library, ChromaDB and sqlite-vec legs.
 
 ## Beyond the happy path: the robustness suite
 
