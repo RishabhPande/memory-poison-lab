@@ -31,6 +31,17 @@ class DemoPageTests(unittest.TestCase):
         for binding in BINDINGS:
             self.assertIn(binding, html, f"missing handler: {binding}")
 
+    def test_evidence_controls_and_safe_text_rendering_are_wired(self):
+        with open(DEMO) as fh:
+            html = fh.read()
+        for binding in ("renderTrace('naive');", "renderTrace('defended');",
+                        "document.getElementById('download').onclick = downloadReplay;",
+                        "node.textContent = text", "row.dataset.reason = entry.reason"):
+            self.assertIn(binding, html)
+        self.assertIn('aria-label="Decision evidence"', html)
+        self.assertIn('schema_version:1', html)
+        self.assertIn("defensesShown ? ['naive','defended','repaired'] : ['naive']", html)
+
     def test_built_page_is_fresh(self):
         """demo/index.html must match a fresh run of scripts/build_demo.py."""
         with open(DEMO, "rb") as fh:
