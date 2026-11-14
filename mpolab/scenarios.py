@@ -204,6 +204,8 @@ def run_scenario(scenario_id: str) -> dict:
     removed = repair_memory.repair()
     after_repair = ScriptedSupplyAgent(repair_memory, defended=False).decide(subject)
 
+    repair_trace = ScriptedSupplyAgent(repair_memory, defended=False).explain(subject)
+
     repair = {
         "policy": REPAIR_POLICY,
         "removed_ids": removed,
@@ -221,12 +223,16 @@ def run_scenario(scenario_id: str) -> dict:
         repair_memory.retain(text, trust, step, source)
         anchored_removed = repair_memory.repair()
         anchored_decision = ScriptedSupplyAgent(repair_memory, defended=False).decide(subject)
+        anchored_trace = ScriptedSupplyAgent(repair_memory, defended=False).explain(subject)
         repair["anchored"] = {
             "owner_write": text,
             "removed_ids": anchored_removed,
             "decision_after": anchored_decision[subject],
             "restored": anchored_decision[subject] == baseline,
         }
+
+    if spec.get("anchor"):
+        repair["anchored"]["trace"] = anchored_trace
 
     return {
         "id": scenario_id,
@@ -245,6 +251,11 @@ def run_scenario(scenario_id: str) -> dict:
             "blocked": defended_decision[subject] == baseline,
         },
         "repair": repair,
+        "traces": {
+            "naive": ScriptedSupplyAgent(naive_memory, defended=False).explain(subject),
+            "defended": ScriptedSupplyAgent(defended_memory, defended=True).explain(subject),
+            "repaired": repair_trace,
+        },
     }
 
 
@@ -266,4 +277,4 @@ def run_all() -> dict:
             ),
             "total": len(runs),
         },
-          }
+    }
