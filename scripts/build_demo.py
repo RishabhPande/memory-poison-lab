@@ -70,6 +70,37 @@ TEMPLATE = """<!doctype html>
                    padding:10px 12px; text-align:center; }
   .aggregate b { display:block; font-size:20px; }
   footer { color:var(--ink2); font-size:12.5px; margin-top:22px; }
+  .evidence { margin:20px 0; border:1px solid var(--ink); border-radius:12px; overflow:hidden; background:#fff; }
+  .evidence-head { padding:18px; background:var(--ink); color:#fff; }
+  .evidence-head .eyebrow { color:#b2d4ca; font-size:11px; text-transform:uppercase; letter-spacing:.12em; font-weight:600; }
+  .evidence h2 { font-size:22px; margin:3px 0 6px; letter-spacing:-.025em; }
+  .evidence-head p { margin:0; font-size:13px; color:#e4dcdf; }
+  .trace-controls { display:flex; flex-wrap:wrap; gap:6px; padding:14px 16px 6px; }
+  .trace-controls button, #download { min-height:44px; border:1px solid var(--line); border-radius:6px;
+    background:#fff; color:var(--ink); padding:8px 12px; font:inherit; font-size:13px; cursor:pointer; }
+  .trace-controls button[aria-pressed=true] { background:#e3efeb; border-color:var(--teal); font-weight:600; }
+  .trace-summary { padding:10px 16px 14px; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+  .trace-summary strong { display:block; font-size:21px; line-height:1.3; margin:4px 0; }
+  .trace-summary small { color:var(--ink2); display:block; }
+  .trace-stats { display:flex; gap:20px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--ink2); }
+  .trace-stats b { color:var(--ink); font-size:17px; margin-right:4px; }
+  .recall-strip { display:flex; flex-wrap:wrap; gap:5px; margin-top:14px; }
+  .recall-slot { min-width:48px; border:1px solid var(--line); background:#f4efec; border-radius:4px; padding:5px 7px; font-size:11px; text-align:center; }
+  .recall-slot b { display:block; font-size:13px; }
+  .recall-slot.winner { background:#e3efeb; border-color:#73a89a; font-weight:600; }
+  .recall-note { font-size:12px; color:var(--ink2); margin-top:8px; }
+  .trace-row { margin:10px 14px; border:1px solid var(--line); border-left:3px solid #c0bebf; border-radius:5px; overflow-wrap:anywhere; }
+  .trace-row.selected { border-left-color:#2f6b5c; background:#f1f7f4; }
+  .trace-row.quarantined, .trace-row.untrusted_origin { border-left-color:var(--red); }
+  .trace-row summary { cursor:pointer; padding:12px; font-size:13px; min-height:44px; }
+  .trace-row .reason { display:block; color:var(--ink2); margin:4px 0 0 18px; font-size:12px; }
+  .trace-row .entry-body { padding:0 12px 12px; font-size:13px; }
+  .trace-row dl { display:grid; grid-template-columns:90px minmax(0,1fr); gap:3px 8px; margin:10px 0 0; font-size:12px; }
+  .trace-row dt { color:var(--ink2); } .trace-row dd { margin:0; }
+  .trace-foot { margin:12px 16px; font-size:12px; color:var(--ink2); }
+  #download { margin-top:10px; font-weight:600; }
+  button:focus-visible, summary:focus-visible { outline:3px solid #2f6b5c; outline-offset:3px; }
+  @media(max-width:420px) { .evidence h2 { font-size:20px; } .trace-controls button { flex:1 1 40%; } }
   .hidden { display:none; }
 </style>
 </head>
@@ -96,6 +127,20 @@ TEMPLATE = """<!doctype html>
   <div id="timeline"></div>
   <div id="decision" class="panel hidden"></div>
   <div id="defense" class="panel hidden"></div>
+  <section class="evidence hidden" id="evidence" aria-label="Decision evidence">
+    <header class="evidence-head">
+      <div class="eyebrow">Inside the recall window</div>
+      <h2>What reached the decision?</h2>
+      <p>Follow the stored write, its recorded origin, and the policy that chose or rejected it.</p>
+    </header>
+    <div class="trace-controls" id="trace-controls" aria-label="Replay phase"></div>
+    <div id="trace-summary" class="trace-summary" aria-live="polite"></div>
+    <div id="trace-rows"></div>
+    <div class="trace-foot">Ranks show actual recall order, not relevance scores. A write outside recall may be irrelevant or displaced.
+      Recorded origin is not proof of pre-import provenance. Scripted replay, not an LLM evaluation.<br>
+      <button id="download" type="button">Download this replay (.json)</button>
+    </div>
+  </section>
   <div class="aggregate" id="aggregate"></div>
   <footer>
     Attack classes from published memory-poisoning research (MemSecBench; AgentPoison; see README).
@@ -117,6 +162,7 @@ const defensePanel = document.getElementById('defense');
 
 let scenarioId = 'A1';
 let shown = 0, timer = null, guess = null, revealed = false;
+let defensesShown = false, tracePhase = 'naive';
 
 function scenario() { return DATA.scenarios[scenarioId]; }
 
@@ -208,6 +254,7 @@ function reveal() {
   revealBtn.disabled = true;
   defendBtn.classList.remove('hidden');
   hint.textContent = '';
+  renderTrace('naive');
 }
 
 function defend() {
@@ -232,11 +279,14 @@ function defend() {
     '<p class="verdict">Origin-aware recall and write-time quarantine: the agent ' + action + ' ' +
     '<span class="good">' + s.defended[s.subject] + '</span>. The attack is blocked.</p>' +
     repairLine;
+  defensesShown = true;
+  renderTrace('defended');
 }
 
 function reset() {
   clearInterval(timer);
-  shown = 0; guess = null; revealed = false;
+  shown = 0; guess = null; revealed = false; defensesShown = false; tracePhase = 'naive';
+  document.getElementById('evidence').classList.add('hidden');
   timeline.innerHTML = '';
   decisionPanel.classList.add('hidden');
   defensePanel.classList.add('hidden');
@@ -253,6 +303,77 @@ function reset() {
   document.getElementById('attackclass').textContent = 'Attack class: ' + s.attack_class + '.';
   hint.textContent = '';
   buildTabs();
+}
+
+const traceLabels = {naive:'No defenses', defended:'Defenses on', repaired:'Repair alone', anchored:'Owner + repair'};
+const reasonLabels = {
+  selected:'Selected by the decision policy', lower_priority:'Eligible, but lower confidence or older than the winner',
+  quarantined:'Write screening quarantined it before recall', not_recalled:'Stored, but outside this recall window',
+  not_preference:'Recalled fact, not a preference', untrusted_origin:'Recalled, but recorded origin is not owner',
+  no_subject_claim:'Recalled, but no parseable claim for this subject'
+};
+function element(tag, text, klass) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (klass) node.className = klass;
+  return node;
+}
+function renderTrace(phase) {
+  tracePhase = phase;
+  const s = scenario();
+  const trace = phase === 'anchored' ? s.repair.anchored.trace : s.traces[phase];
+  document.getElementById('evidence').classList.remove('hidden');
+  const controls = document.getElementById('trace-controls'); controls.replaceChildren();
+  const phases = defensesShown ? ['naive','defended','repaired'] : ['naive'];
+  if (defensesShown && s.repair.anchored) phases.push('anchored');
+  for (const key of phases) {
+    const button = element('button', traceLabels[key]);
+    button.type = 'button'; button.setAttribute('aria-pressed', String(phase === key));
+    button.onclick = () => renderTrace(key); controls.appendChild(button);
+  }
+  const summary = document.getElementById('trace-summary'); summary.replaceChildren();
+  summary.appendChild(element('small', traceLabels[phase] + ' / ' + trace.subject));
+  summary.appendChild(element('strong', trace.decision[trace.subject]));
+  summary.appendChild(element('small', trace.decision.influenced_by === null
+    ? 'Fallback: no eligible recalled claim.' : 'Chosen from write #' + trace.decision.influenced_by + '. Policy: highest confidence, then newest write.'));
+  summary.appendChild(element('small', 'Recall query: "' + trace.query + '"'));
+  const stats = element('div', undefined, 'trace-stats');
+  for (const [n, label] of [[trace.entries.length,'stored'],[trace.decision.recalled_ids.length,'recalled / limit ' + trace.recall_limit],
+    [trace.entries.filter(e => e.reason === 'quarantined').length,'quarantined']]) {
+    const stat = element('span'); stat.append(element('b',String(n)), document.createTextNode(label)); stats.appendChild(stat);
+  }
+  summary.appendChild(stats);
+  const strip = element('div',undefined,'recall-strip'); strip.setAttribute('aria-label','Recall window in rank order');
+  trace.decision.recalled_ids.forEach((id,index) => {
+    const slot = element('div',undefined,'recall-slot' + (id === trace.decision.influenced_by ? ' winner' : ''));
+    slot.append(element('span','Rank ' + (index+1)),element('b','#' + id)); strip.appendChild(slot);
+  });
+  summary.appendChild(strip);
+  const missingOwners = trace.entries.filter(e => e.origin === 'owner' && e.reason === 'not_recalled').map(e => '#' + e.id);
+  if (missingOwners.length) summary.appendChild(element('div','Owner writes outside recall: ' + missingOwners.join(', '), 'recall-note'));
+  const rows = document.getElementById('trace-rows'); rows.replaceChildren();
+  const ordered = [...trace.entries].sort((a,b) => (a.recall_rank ?? Infinity) - (b.recall_rank ?? Infinity) || a.id-b.id);
+  for (const entry of ordered) {
+    const row = element('details', undefined, 'trace-row ' + entry.reason);
+    row.dataset.entry = entry.id; row.dataset.reason = entry.reason;
+    row.open = entry.reason === 'selected';
+    const heading = element('summary', (entry.recall_rank === null ? 'Outside recall' : 'Rank ' + entry.recall_rank)
+      + ' / write #' + entry.id + ' / ' + entry.origin);
+    heading.appendChild(element('span', reasonLabels[entry.reason], 'reason'));
+    const body = element('div', undefined, 'entry-body'); body.appendChild(element('div', entry.text));
+    const metadata = element('dl');
+    for (const [label,value] of [['Stored label',entry.trust],['Origin',entry.origin],['Source',entry.source || 'Not recorded'],
+      ['Confidence',String(entry.confidence)],['Step',String(entry.step)]]) metadata.append(element('dt',label),element('dd',value));
+    body.appendChild(metadata); row.append(heading,body); rows.appendChild(row);
+  }
+  if (!ordered.length) rows.appendChild(element('p','No stored writes.', 'trace-foot'));
+}
+function downloadReplay() {
+  if (!revealed) return;
+  const report = {schema_version:1, scope:'Scripted deterministic replay on synthetic targets, not an LLM evaluation.', scenario:scenario()};
+  const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], {type:'application/json'}));
+  const link = document.createElement('a'); link.href = url; link.download = 'memory-poison-lab-' + scenarioId + '.json';
+  link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function aggregate() {
@@ -292,6 +413,7 @@ playBtn.onclick = play;
 revealBtn.onclick = reveal;
 defendBtn.onclick = defend;
 resetBtn.onclick = reset;
+document.getElementById('download').onclick = downloadReplay;
 aggregate();
 reset();
 autodrive();
